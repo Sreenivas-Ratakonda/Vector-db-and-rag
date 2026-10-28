@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vector DBs &amp; RAG</title>
+<style>
+  :root{
+    --bg:#14110f; --panel:#1f1a17; --panel2:#2a231f; --ink:#f5efe8; --muted:#b8aa9c;
+    --accent:#f59e0b; --accent2:#38bdf8; --good:#4ade80; --bad:#f87171; --line:#3d332c;
+    --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
+    font-family:"Segoe UI", system-ui, -apple-system, Roboto, sans-serif;overflow:hidden}
+  .slide{position:absolute;inset:0;padding:5vh 6vw 9vh;display:none;flex-direction:column;gap:2.4vh}
+  .slide.active{display:flex;animation:in .35s ease}
+  @keyframes in{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+  h1{font-size:clamp(28px,5.2vw,72px);margin:0;line-height:1.05}
+  h2{font-size:clamp(22px,3.2vw,44px);margin:0}
+  h2 .tag{font-size:.45em;vertical-align:middle;margin-left:.6em;padding:.25em .7em;border-radius:99px;
+    background:var(--panel2);color:var(--accent);border:1px solid var(--line);letter-spacing:.05em}
+  p,li,td,th{font-size:clamp(14px,1.55vw,22px);line-height:1.45}
+  .muted{color:var(--muted)} .acc{color:var(--accent)} .blue{color:var(--accent2)}
+  .good{color:var(--good)} .bad{color:var(--bad)}
+  code,pre{font-family:var(--mono)}
+  pre{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:1.6vh 1.6vw;margin:0;
+    font-size:clamp(12px,1.3vw,19px);line-height:1.5;white-space:pre-wrap;overflow:auto}
+  .grid{display:grid;gap:1.6vw} .g2{grid-template-columns:1fr 1fr} .g3{grid-template-columns:repeat(3,1fr)}
+  .g5{grid-template-columns:repeat(5,1fr)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:1.8vh 1.4vw}
+  .card h3{margin:0 0 .6vh;font-size:clamp(15px,1.6vw,24px);color:var(--accent)}
+  .card p{margin:.3vh 0;font-size:clamp(13px,1.4vw,20px)}
+  .big,.card p.big{font-size:clamp(18px,2.4vw,34px)}
+  .slide.mid{justify-content:center}
+  .center{align-items:center;justify-content:center;text-align:center}
+  .flow{display:flex;align-items:stretch;gap:.8vw;flex-wrap:wrap}
+  .flow .step{flex:1;min-width:110px;background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:1.8vh .9vw;text-align:center;font-size:clamp(13px,1.5vw,22px)}
+  .flow .step b{display:block;font-size:1.9em;margin-bottom:.4vh}
+  .flow .arrow{align-self:center;color:var(--accent);font-size:clamp(18px,2.2vw,32px)}
+  .step.hl{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset}
+  table{border-collapse:collapse;width:100%}
+  th,td{border-bottom:1px solid var(--line);padding:.8vh .8vw;text-align:left;vertical-align:top}
+  th{color:var(--accent);font-weight:600}
+  td:first-child{color:var(--muted)}
+  .vec{display:flex;gap:3px;height:6vh;align-items:flex-end}
+  .vec span{flex:1;border-radius:3px 3px 0 0}
+  ul{margin:0;padding-left:1.3em} li{margin:.6vh 0}
+  .pill{display:inline-block;padding:.2em .7em;border-radius:99px;background:var(--panel2);border:1px solid var(--line);margin:.2em}
+  svg text{font-family:"Segoe UI",system-ui,sans-serif}
+  .tree{display:grid;grid-template-columns:1.25fr .1fr 1fr;gap:1vh .6vw;align-items:center}
+  .q{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:1.2vh 1vw;font-size:clamp(13px,1.45vw,21px)}
+  .a{border-radius:10px;padding:1.2vh 1vw;font-size:clamp(13px,1.45vw,21px);border:1px solid var(--line);background:var(--panel)}
+  .a.vdb{border-color:var(--accent);background:#3a2a10}
+  .tree .yes{color:var(--good);text-align:center;font-weight:700}
+  #bar{position:fixed;left:0;bottom:0;height:5px;background:var(--accent);transition:width .3s}
+  #num{position:fixed;right:2vw;bottom:2vh;color:var(--muted);font-size:14px}
+  #hint{position:fixed;left:2vw;bottom:2vh;color:var(--muted);font-size:13px;opacity:.7}
+  .foot{margin-top:auto;color:var(--muted);font-size:clamp(12px,1.1vw,16px)}
+</style>
+</head>
+<body>
+
+<!-- 1 --------------------------------------------------------------- -->
+<section class="slide center">
+  <p class="acc" style="letter-spacing:.2em;margin:0">A 30-MINUTE INTRODUCTION</p>
+  <h1>Vector Databases <span class="acc">&amp;</span> RAG</h1>
+  <p class="big muted">How computers search by <b class="acc">meaning</b>, and how AI answers from <b class="blue">your</b> documents</p>
+  <p class="muted" style="margin-top:4vh">Press <b>→</b> / <b>Space</b> to advance · <b>F</b> for fullscreen</p>
+</section>
+
+<!-- 2 --------------------------------------------------------------- -->
+<section class="slide">
+  <h2>The problem <span class="tag">HOOK</span></h2>
+  <div class="grid g2" style="flex:1">
+    <div class="card">
+      <h3>🧑 Customer asks</h3>
+      <p class="big">"I want my <b class="acc">money back</b>"</p>
+      <h3 style="margin-top:3vh">📄 Policy document says</h3>
+      <p class="big">"<b class="blue">Refunds</b> are issued within 5–7 business days."</p>
+    </div>
+    <div class="card">
+      <h3>🗄️ Traditional database</h3>
+<pre>SELECT * FROM docs
+WHERE text LIKE '%money back%';
+
+<span class="bad">-- 0 rows returned</span></pre>
+      <p class="big" style="margin-top:3vh">Zero words in common.<br><span class="acc">Same meaning.</span></p>
+      <p class="muted">How does a computer know these are the same thing?</p>
+    </div>
+  </div>
+</section>
+
+<!-- 3 --------------------------------------------------------------- -->
+<section class="slide mid">
+  <h2>Today's journey</h2>
+  <div class="flow" style="margin-top:4vh">
+    <div class="step"><b>🔢</b>Embeddings<br><span class="muted">meaning → numbers</span></div><div class="arrow">→</div>
+    <div class="step"><b>🗄️</b>Vector DBs<br><span class="muted">search by similarity</span></div><div class="arrow">→</div>
+    <div class="step"><b>🤖</b>RAG<br><span class="muted">LLM + your data</span></div><div class="arrow">→</div>
+    <div class="step"><b>🧩</b>Together<br><span class="muted">and when NOT to</span></div><div class="arrow">→</div>
+    <div class="step hl"><b>🖥️</b>Live demo<br><span class="muted">Python on a laptop</span></div>
+  </div>
+  <p class="muted foot">Everything (code, docs, these slides) is in the repo: github.com/Sreenivas-Ratakonda/vector-db-and-rag</p>
+</section>
+
+<!-- 4 --------------------------------------------------------------- -->
+<section class="slide">
+  <h2>Embeddings: meaning → numbers <span class="tag">VECTOR DB</span></h2>
+  <p>An <b class="acc">embedding model</b> turns text into a fixed-length list of numbers, a <b>vector</b>.</p>
+  <div class="card">
+    <p>"I want my money back" → <code class="acc">[0.12, -0.48, 0.33, 0.05, … 384 numbers]</code></p>
+    <div class="vec" id="v1"></div>
+    <p style="margin-top:1.5vh">"What is the refund policy?" → <code class="acc">[0.10, -0.45, 0.31, 0.07, …]</code> <b class="good">← very similar</b></p>
+    <div class="vec" id="v2"></div>
+    <p style="margin-top:1.5vh">"How many leave days do I get?" → <code>[-0.62, 0.21, -0.05, …]</code> <b class="bad">← very different</b></p>
+    <div class="vec" id="v3"></div>
+  </div>
+  <p class="muted">Real models: 384 (MiniLM, used in our demo) to 3072 dimensions.</p>
+</section>
+
+<!-- 5 --------------------------------------------------------------- -->
+<section class="slide">
+  <h2>Think: GPS coordinates for meaning</h2>
+  <svg viewBox="0 0 900 440" style="flex:1;width:100%">
+    <rect x="1" y="1" width="898" height="438" rx="14" fill="#1f1a17" stroke="#3d332c"/>
+    <g fill="none" stroke-dasharray="6 6" stroke-width="2">
+      <ellipse cx="210" cy="140" rx="170" ry="84" stroke="#f59e0b"/>
+      <ellipse cx="680" cy="130" rx="160" ry="85" stroke="#38bdf8"/>
+      <ellipse cx="230" cy="330" rx="170" ry="80" stroke="#4ade80"/>
+      <ellipse cx="680" cy="335" rx="150" ry="75" stroke="#c084fc"/>
+    </g>
+    <g font-size="15" font-weight="700">
+      <text x="60" y="36" fill="#f59e0b">REFUNDS &amp; RETURNS</text>
+      <text x="540" y="36" fill="#38bdf8">HR &amp; LEAVE</text>
+      <text x="80" y="246" fill="#4ade80">COFFEE PRODUCTS</text>
+      <text x="550" y="252" fill="#c084fc">IT &amp; SECURITY</text>
+    </g>
+    <g font-size="17" fill="#f5efe8">
+      <circle cx="160" cy="120" r="7" fill="#f59e0b"/><text x="172" y="125">refund policy</text>
+      <circle cx="190" cy="160" r="7" fill="#f59e0b"/><text x="202" y="165">"money back"</text>
+      <circle cx="120" cy="195" r="7" fill="#f59e0b"/><text x="132" y="200">damaged item</text>
+      <circle cx="620" cy="110" r="7" fill="#38bdf8"/><text x="632" y="115">annual leave</text>
+      <circle cx="660" cy="160" r="7" fill="#38bdf8"/><text x="672" y="165">sick days</text>
+      <circle cx="160" cy="320" r="7" fill="#4ade80"/><text x="172" y="325">espresso machine</text>
+      <circle cx="220" cy="360" r="7" fill="#4ade80"/><text x="232" y="365">coffee beans</text>
+      <circle cx="620" cy="320" r="7" fill="#c084fc"/><text x="632" y="325">lost laptop</text>
+      <circle cx="650" cy="365" r="7" fill="#c084fc"/><text x="662" y="370">phishing email</text>
+    </g>
+    <line x1="190" y1="160" x2="160" y2="120" stroke="#f5efe8" stroke-width="2"/>
+    <text x="450" y="428" text-anchor="middle" fill="#b8aa9c" font-size="15">close together = similar meaning, even with no shared words</text>
+  </svg>
+</section>
+
+<!-- 6 --------------------------------------------------------------- -->
+<section class="slide">
+  <h2>Measuring "close": cosine similarity</h2>
+  <div class="grid g2" style="flex:1;align-items:center">
+    <svg viewBox="0 0 420 340" style="width:100%">
+      <defs><marker id="ah" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+        <path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>
+      <circle cx="60" cy="280" r="5" fill="#f5efe8"/>
+      <line x1="60" y1="280" x2="330" y2="90" stroke="#f59e0b" stroke-width="4" marker-end="url(#ah)"/>
+      <line x1="60" y1="280" x2="320" y2="170" stroke="#f59e0b" stroke-width="4" marker-end="url(#ah)"/>
+      <line x1="60" y1="280" x2="110" y2="20" stroke="#38bdf8" stroke-width="4" marker-end="url(#ah)"/>
+      <text x="300" y="80" fill="#f59e0b" font-size="17">refund</text>
+      <text x="200" y="240" fill="#f59e0b" font-size="17">money back</text>
+      <text x="120" y="30" fill="#38bdf8" font-size="17">annual leave</text>
+      <text x="150" y="305" fill="#4ade80" font-size="16">small angle → 0.8</text>
+      <text x="95" y="150" fill="#f87171" font-size="16">big angle → 0.1</text>
+    </svg>
+    <table>
+      <tr><th>Metric</th><th>Idea</th></tr>
+      <tr><td><b class="acc">Cosine</b></td><td>Angle between arrows · 1 = same meaning · <b>default for text</b></td></tr>
+      <tr><td>Dot product</td><td>Angle × length (same as cosine when normalised)</td></tr>
+      <tr><td>Euclidean</td><td>Straight-line distance · 0 = same</td></tr>
+    </table>
+  </div>
+  <p class="acc big">🖥️ DEMO 1 → <code>python rag\step1_embeddings.py</code></p>
+</section>
+
+<!-- 7 --------------------------------------------------------------- -->
+<section class="slide">
+  <h2>So what is a vector database?</h2>
+  <p>A database that stores vectors and answers one question very fast:<br>
+     <b class="acc big">"Give me the k items most similar to this."</b></p>
+  <div class="grid g2">
+    <div class="card">
+      <h3>One record</h3>
+<pre><span class="muted">id:</span>       refund-policy.md#2
+<span class="muted">vector:</span>   <span class="acc">[0.10, -0.45, 0.31, … 384]</span>
+<span class="muted">document:</span> "Refunds go back to the original
+           payment method within 5-7 days…"
+<span class="muted">metadata:</span> {source: refund-policy.md,
+           dept: support, year: 2026}</pre>
+    </div>
+    <div class="card">
+      <h3>One query</h3>
+      <div class="flow">
+        <div class="step">"money back"</div><div class="arrow">→</div>
+        <div class="step">🔢 embed</div><div class="arrow">→</div>
+        <div class="step hl">🗄️ k-NN search</div>
+      </div>
+<pre style="margin-top:1.5vh">1. Refund policy     <span class="good">0.82</span>
+2. Damaged items     <span class="good">0.71</span>
+3. Store credit      <span class="good">0.64</span></pre>
+    </div>
+  </div>
+</section>
+
+<!-- 8 --------------------------------------------------------------- -->
+<section class="slide">
+  <h2>Vector DB vs traditional databases</h2>
+  <table>
+    <tr><th></th><th>SQL (Postgres)</th><th>NoSQL (Mongo)</th><th>Search (Elastic)</th><th style="color:var(--accent2)">Vector DB</th></tr>
+    <tr><td>Stores</td><td>Rows</td><td>JSON docs</td><td>Text + inverted index</td><td><b>Vectors + metadata</b></td></tr>
+    <tr><td>Query</td><td><code>price &lt; 10</code></td><td><code>{dept:"HR"}</code></td><td>Keywords (BM25)</td><td><b>"similar to this"</b></td></tr>
+    <tr><td>Match</td><td>Exact</td><td>Exact</td><td>Words</td><td><b class="acc">Meaning</b></td></tr>
+    <tr><td>Index</td><td>B-tree</td><td>B-tree</td><td>Inverted</td><td><b>HNSW / IVF / PQ</b></td></tr>
+    <tr><td>Great at</td><td>Transactions, joins</td><td>Flexible schema</td><td>Keyword search</td><td><b>Semantic search, RAG, recs</b></td></tr>
+    <tr><td>Bad at</td><td colspan="3">Synonyms, paraphrases, "find similar"</td><td>Totals, joins, exact reports</td></tr>
+  </table>
+  <p class="big">Not a replacement. <span class="acc">A different question.</span> Most systems use both.</p>
+</section>
+
+<!-- 9 --------------------------------------------------------------- -->
+<section class="slide">
+  <h2>How is it fast? ANN indexes</h2>
+  <div class="grid g3" style="flex:1">
+    <div class="card">
+      <h3>Flat (brute force)</h3>
+      <svg viewBox="0 0 200 120" style="width:100%">
+        <g fill="#b8aa9c"><circle cx="20" cy="20" r="5"/><circle cx="60" cy="40" r="5"/><circle cx="110" cy="25" r="5"/><circle cx="170" cy="30" r="5"/><circle cx="30" cy="90" r="5"/><circle cx="80" cy="100" r="5"/><circle cx="140" cy="85" r="5"/><circle cx="180" cy="100" r="5"/></g>
+        <circle cx="100" cy="65" r="7" fill="#f59e0b"/>
+        <g stroke="#f59e0b" stroke-width="1" opacity=".6"><line x1="100" y1="65" x2="20" y2="20"/><line x1="100" y1="65" x2="60" y2="40"/><line x1="100" y1="65" x2="110" y2="25"/><line x1="100" y1="65" x2="170" y2="30"/><line x1="100" y1="65" x2="30" y2="90"/><line x1="100" y1="65" x2="80" y2="100"/><line x1="100" y1="65" x2="140" y2="85"/><line x1="100" y1="65" x2="180" y2="100"/></g>
+      </svg>
+      <p>Compare with <b>every</b> vector.</p><p class="good">100% accurate</p><p class="bad">Slow at millions</p><p class="muted">Our step 2 demo</p>
+    </div>
+    <div class="card">
+      <h3>IVF (clusters)</h3>
+      <svg viewBox="0 0 200 120" style="width:100%">
+        <circle cx="50" cy="40" r="32" fill="#f59e0b22" stroke="#f59e0b"/><circle cx="150" cy="40" r="32" fill="none" stroke="#3d332c"/>
+        <circle cx="50" cy="90" r="28" fill="none" stroke="#3d332c"/><circle cx="150" cy="90" r="28" fill="none" stroke="#3d332c"/>
+        <g fill="#b8aa9c"><circle cx="40" cy="35" r="4"/><circle cx="60" cy="48" r="4"/><circle cx="140" cy="35" r="4"/><circle cx="160" cy="45" r="4"/><circle cx="45" cy="95" r="4"/><circle cx="155" cy="92" r="4"/></g>
+        <circle cx="62" cy="30" r="6" fill="#f59e0b"/>
+      </svg>
+      <p>Group vectors into neighbourhoods. Search only the <b>nearest few</b>.</p><p class="good">Fast, low memory</p><p class="muted">~95–99% recall</p>
+    </div>
+    <div class="card" style="border-color:var(--accent)">
+      <h3>HNSW (graph) ⭐ default</h3>
+      <svg viewBox="0 0 200 120" style="width:100%">
+        <g stroke="#3d332c" stroke-width="1.5"><line x1="20" y1="15" x2="180" y2="15"/><line x1="20" y1="55" x2="180" y2="55"/><line x1="20" y1="100" x2="180" y2="100"/></g>
+        <g fill="#38bdf8"><circle cx="30" cy="15" r="5"/><circle cx="150" cy="15" r="5"/></g>
+        <g fill="#38bdf8"><circle cx="30" cy="55" r="5"/><circle cx="80" cy="55" r="5"/><circle cx="150" cy="55" r="5"/></g>
+        <g fill="#b8aa9c"><circle cx="30" cy="100" r="4"/><circle cx="55" cy="100" r="4"/><circle cx="80" cy="100" r="4"/><circle cx="105" cy="100" r="4"/><circle cx="130" cy="100" r="4"/><circle cx="150" cy="100" r="4"/><circle cx="175" cy="100" r="4"/></g>
+        <path d="M30,15 L150,15 L150,55 L150,100 L130,100" stroke="#f59e0b" stroke-width="3" fill="none"/>
+        <circle cx="130" cy="100" r="6" fill="#f59e0b"/>
+      </svg>
+      <p><b>Highways → main roads → local streets.</b> Hop toward the target, drop a level.</p><p class="good">Very fast, high recall</p><p class="muted">Chroma, Qdrant, pgvector, Milvus…</p>
+    </div>
+  </div>
+  <p class="muted">ANN = Approximate Nearest Neighbour: trade a tiny bit of accuracy for huge speed. PQ compresses vectors 10–60× for billion-scale.</p>
+</section>
+
+<!-- 10 -------------------------------------------------------------- -->
+<section class="slide">
+  <h2>Types of vector databases</h2>
+  <div class="grid g5">
+    <div class="card"><h3>📦 Libraries</h3><p>FAISS, hnswlib, Annoy</p><p class="muted">Fastest, no server. You build persistence and CRUD yourself.</p></div>
+    <div class="card" style="border-color:var(--accent)"><h3>💻 Embedded</h3><p>Chroma, LanceDB</p><p class="muted"><code>pip install</code>, runs in-process. Prototypes and small apps. <b class="acc">Our demo.</b></p></div>
+    <div class="card"><h3>🖧 Self-hosted</h3><p>Qdrant, Milvus, Weaviate</p><p class="muted">Full features, scale-out, open source. You operate it.</p></div>
+    <div class="card"><h3>☁️ Managed</h3><p>Pinecone, Zilliz Cloud</p><p class="muted">Zero ops, autoscaling. Cost; data leaves your infra.</p></div>
+    <div class="card"><h3>🧩 Extensions</h3><p>pgvector, Elasticsearch, MongoDB Atlas, Redis</p><p class="muted">Vectors inside the DB you already run.</p></div>
+  </div>
+  <div class="card">
+    <h3>Rule of thumb</h3>
+    <p>Already on <b>Postgres</b> → <b class="acc">pgvector</b> · Learning / prototype → <b class="acc">Chroma</b> · Billions of vectors, multi-tenant → <b class="acc">Qdrant / Milvus / Pinecone</b> · Keyword + vector → <b class="acc">Elastic / Weaviate / Qdrant</b></p>
+  </div>
+  <p class="muted">Beyond RAG: semantic search · recommendations · image search · dedup · anomaly detection · agent memory</p>
+</section>
+
+<!-- 11 -------------------------------------------------------------- -->
+<section class="slide">
+  <h2>Why LLMs need help <span class="tag">RAG</span></h2>
+  <div class="grid g2" style="flex:1">
+    <div class="card">
+      <ul>
+        <li>🗓️ <b>Knowledge cutoff</b>: doesn't know last week's changes</li>
+        <li>🔒 <b>No private data</b>: never saw your HR policy</li>
+        <li>🤥 <b>Hallucination</b>: confidently invents "14-day refunds"</li>
+        <li>📏 <b>Limited context</b>: can't paste 50,000 pages each time</li>
+        <li>🔍 <b>No citations</b>: can't verify the answer</li>
+      </ul>
+    </div>
+    <div class="card center" style="display:flex;flex-direction:column">
+      <p class="big">📕 Plain LLM = <b>closed-book exam</b></p>
+      <p class="muted">Smart, answers from memory, sometimes bluffs</p>
+      <p class="big" style="margin-top:3vh">📖 RAG = <b class="acc">open-book exam</b></p>
+      <p class="muted">Looks up the right pages of <b>your</b> book first, then answers</p>
+    </div>
+  </div>
+</section>
+
+<!-- 12 -------------------------------------------------------------- -->
+<section class="slide mid">
+  <h2>RAG in one picture</h2>
+  <div class="flow" style="margin-top:2vh">
+    <div class="step"><b>❓</b>"Can I return a broken machine?"</div><div class="arrow">→</div>
+    <div class="step hl"><b>🔍</b><span class="acc">R</span>etrieve<br><span class="muted">find relevant chunks in your docs</span></div><div class="arrow">→</div>
+    <div class="step hl"><b>📝</b><span class="acc">A</span>ugment<br><span class="muted">question + chunks into one prompt</span></div><div class="arrow">→</div>
+    <div class="step hl"><b>🤖</b><span class="acc">G</span>enerate<br><span class="muted">LLM writes the answer</span></div><div class="arrow">→</div>
+    <div class="step"><b>✅</b>"Yes, send a photo within 7 days. Full refund incl. shipping." <span class="acc">[refund-policy.md]</span></div>
+  </div>
+  <div class="card" style="margin-top:2vh">
+    <p class="big center" style="display:flex">Retrieval-Augmented Generation = <b class="acc">&nbsp;look it up, then answer from it</b></p>
+  </div>
+</section>
+
+<!-- 13 -------------------------------------------------------------- -->
+<section class="slide mid">
+  <h2>Two phases</h2>
+  <div class="card">
+    <h3>① INDEXING: offline, once (and when docs change)</h3>
+    <div class="flow">
+      <div class="step"><b>📄</b>Docs<br><span class="muted">PDF, Word, wiki</span></div><div class="arrow">→</div>
+      <div class="step"><b>📥</b>Load<br><span class="muted">extract text</span></div><div class="arrow">→</div>
+      <div class="step"><b>✂️</b>Chunk<br><span class="muted">~300–1000 chars</span></div><div class="arrow">→</div>
+      <div class="step"><b>🔢</b>Embed<br><span class="muted">chunk → vector</span></div><div class="arrow">→</div>
+      <div class="step hl"><b>🗄️</b>Store<br><span class="muted">vector DB</span></div>
+    </div>
+  </div>
+  <div class="card">
+    <h3 class="blue" style="color:var(--accent2)">② QUERYING: online, every question</h3>
+    <div class="flow">
+      <div class="step"><b>❓</b>Question</div><div class="arrow">→</div>
+      <div class="step"><b>🔢</b>Embed<br><span class="muted">same model!</span></div><div class="arrow">→</div>
+      <div class="step hl"><b>🔍</b>Search<br><span class="muted">top-k chunks</span></div><div class="arrow">→</div>
+      <div class="step"><b>📝</b>Prompt<br><span class="muted">rules + chunks + Q</span></div><div class="arrow">→</div>
+      <div class="step"><b>🤖</b>LLM<br><span class="muted">answer + sources</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- 14 -------------------------------------------------------------- -->
+<section class="slide">
+  <h2>The prompt: where the magic is visible</h2>
+<pre><span class="muted">You are a helpful assistant for Brewly Coffee Co. employees.
+Answer the question using ONLY the context below.
+If the answer is not in the context, say "I don't know based on the provided documents."
+Cite the source file names you used in square brackets.</span>
+
+<span class="acc">Context:
+[leave-policy.md]
+Full-time employees get 24 days of paid annual leave per calendar year.
+Up to 5 unused days can be carried over to the next year; anything beyond that expires on 31 March.</span>
+
+<span class="blue">Question: Can I carry over unused leave?</span>
+Answer:</pre>
+  <p class="big">The model isn't <i>remembering</i>. It's <b class="acc">reading</b> what retrieval handed it.</p>
+  <p class="acc big">🖥️ DEMO 2 → <code>python rag\step2_rag_without_vectordb.py</code></p>
+</section>
+
+<!-- 15 -------------------------------------------------------------- -->
+<section class="slide mid">
+  <h2>Where the vector DB fits <span class="tag">TOGETHER</span></h2>
+  <div class="flow">
+    <div class="step"><b>❓</b>Question</div><div class="arrow">→</div>
+    <div class="step"><b>🔢</b>Embed</div><div class="arrow">→</div>
+    <div class="step hl" style="flex:1.6"><b>🗄️</b><span class="acc">VECTOR DB = the "R" in RAG</span></div><div class="arrow">→</div>
+    <div class="step"><b>📝</b>Prompt</div><div class="arrow">→</div>
+    <div class="step"><b>🤖</b>LLM</div>
+  </div>
+  <table>
+    <tr><th>RAG needs…</th><th>Vector DB gives…</th></tr>
+    <tr><td>Find chunks by meaning</td><td>Similarity search over embeddings</td></tr>
+    <tr><td>Stay fast with millions of chunks</td><td>ANN index (HNSW / IVF)</td></tr>
+    <tr><td>Don't re-embed on every restart</td><td>Persistence</td></tr>
+    <tr><td>"Only HR docs" / "only this customer"</td><td><b class="acc">Metadata filters</b> (also access control!)</td></tr>
+    <tr><td>Docs change daily</td><td>Add / update / delete per record</td></tr>
+    <tr><td>Show where the answer came from</td><td>Source stored next to every vector</td></tr>
+  </table>
+</section>
+
+<!-- 16 -------------------------------------------------------------- -->
+<section class="slide mid">
+  <h2>Does my RAG need a vector DB?</h2>
+  <div class="tree">
+    <div class="q">Does all the content fit in the LLM's context and rarely change?</div><div class="yes">YES →</div><div class="a">📋 Just put it in the prompt</div>
+    <div class="q">Is the data structured (rows, numbers, IDs)?</div><div class="yes">YES →</div><div class="a">🧮 SQL / API / function calling</div>
+    <div class="q">Do users search by exact codes (E-4021, SKU-778)?</div><div class="yes">YES →</div><div class="a">🔤 Keyword search (BM25)</div>
+    <div class="q">Small corpus (&lt; ~50k chunks), one app, cheap to rebuild?</div><div class="yes">YES →</div><div class="a">🧠 In-memory numpy / FAISS <span class="muted">(demo 2)</span></div>
+    <div class="q">Large, growing, needs persistence / filters / updates / many users?</div><div class="yes">YES →</div><div class="a vdb">🗄️ <b>VECTOR DB</b> <span class="muted">(demo 3)</span></div>
+    <div class="q">Mix of exact terms and natural language?</div><div class="yes">YES →</div><div class="a" style="border-color:var(--accent2)">🔀 <b>Hybrid</b>: keyword + vector + reranker</div>
+  </div>
+  <p class="big">RAG ≠ vector DB. <span class="acc">Pick the retriever that fits the data.</span></p>
+</section>
+
+<!-- 17 -------------------------------------------------------------- -->
+<section class="slide mid">
+  <h2>Retrieval: a spectrum</h2>
+  <div class="flow">
+    <div class="step">Prompt stuffing<br><span class="muted">no retrieval</span></div><div class="arrow">→</div>
+    <div class="step">Keyword<br><span class="muted">BM25</span></div><div class="arrow">→</div>
+    <div class="step">In-memory<br><span class="muted">vectors</span></div><div class="arrow">→</div>
+    <div class="step hl">Vector DB</div><div class="arrow">→</div>
+    <div class="step" style="border-color:var(--accent2)">Hybrid + rerank<br><span class="muted">production default</span></div><div class="arrow">→</div>
+    <div class="step">Graph / Agentic RAG</div>
+  </div>
+  <div class="card">
+    <h3>Hybrid search</h3>
+    <div class="flow">
+      <div class="step">❓ Question</div><div class="arrow">⇉</div>
+      <div class="step">🔤 Keyword<br><span class="muted">catches "E-4021", "MFA"</span><br><br>🧠 Vector<br><span class="muted">catches "money back" ≈ "refund"</span></div><div class="arrow">→</div>
+      <div class="step">🔀 Merge<br><span class="muted">rank fusion</span></div><div class="arrow">→</div>
+      <div class="step">🎯 Rerank<br><span class="muted">top ~20 → best 3–5</span></div><div class="arrow">→</div>
+      <div class="step">🤖 LLM</div>
+    </div>
+  </div>
+  <p><b>80% of RAG bugs are retrieval bugs.</b> <span class="muted">Always print the retrieved chunks first.</span></p>
+</section>
+
+<!-- 18 -------------------------------------------------------------- -->
+<section class="slide mid">
+  <h2>🖥️ Live demo <span class="tag">DEMO</span></h2>
+<pre><span class="muted"># once</span>
+.\setup.ps1 ; .\.venv\Scripts\Activate.ps1
+
+<span class="muted"># 1 · embeddings: "money back" ≈ "refund"</span>
+python rag\step1_embeddings.py
+
+<span class="muted"># 2 · RAG with NO vector DB: numpy matrix, brute force</span>
+python rag\step2_rag_without_vectordb.py "Can I carry over unused leave?"
+
+<span class="muted"># 3 · RAG with ChromaDB: persistence, filters, citations</span>
+python rag\step3_rag_with_chromadb.py "Can I return a broken espresso machine?"
+python rag\step3_rag_with_chromadb.py --source leave-policy.md "how many days off?"
+python rag\step3_rag_with_chromadb.py          <span class="acc"># interactive: audience questions!</span></pre>
+  <p class="muted">LLM: Ollama (free, local) · Claude · OpenAI · or none (retrieval-only still works)</p>
+</section>
+
+<!-- 19 -------------------------------------------------------------- -->
+<section class="slide center">
+  <h2>Takeaways</h2>
+  <div class="grid g2" style="text-align:left;max-width:1200px;width:100%">
+    <div class="card"><h3>1 · Embeddings</h3><p>turn <b>meaning</b> into numbers. Close numbers = similar meaning.</p></div>
+    <div class="card"><h3>2 · Vector DBs</h3><p>find the <b>most similar</b> vectors fast (HNSW), with persistence and filters.</p></div>
+    <div class="card"><h3>3 · RAG</h3><p><b>retrieve → augment → generate</b>: LLM answers from <b>your</b> data, with citations.</p></div>
+    <div class="card"><h3>4 · Not always a vector DB</h3><p>Small → prompt / in-memory. Structured → SQL. Codes → keyword. Big → <b>vector DB</b>.</p></div>
+  </div>
+  <p class="big acc" style="margin-top:3vh">Questions? 🙋</p>
+  <p class="muted">github.com/Sreenivas-Ratakonda/vector-db-and-rag</p>
+</section>
+
+<div id="bar"></div><div id="num"></div><div id="hint">← → navigate · F fullscreen</div>
+
+<script>
+  // fake-but-consistent embedding bars for slide 4
+  function bars(id, seed, base) {
+    const el = document.getElementById(id); if (!el) return;
+    let s = seed;
+    const rnd = () => (s = (s * 9301 + 49297) % 233280) / 233280;
+    for (let i = 0; i < 48; i++) {
+      const v = base ? base[i] + (rnd() - .5) * .12 : rnd();
+      const b = document.createElement('span');
+      b.style.height = (12 + Math.abs(v) * 88) + '%';
+      b.style.background = v > .5 ? 'var(--accent)' : 'var(--accent2)';
+      b.style.opacity = .55 + v * .45;
+      el.appendChild(b);
+    }
+    return [...Array(48)].map((_, i) => parseFloat(el.children[i].style.height) / 100);
+  }
+  const b1 = bars('v1', 7); bars('v2', 11, b1.map(x => (x - .12) / .88)); bars('v3', 99);
+
+  const slides = [...document.querySelectorAll('.slide')];
+  let i = 0;
+  try { i = Math.min(slides.length - 1, Math.max(0, parseInt(location.hash.slice(1)) - 1 || 0)); } catch (e) {}
+  function show(n) {
+    i = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach((s, k) => s.classList.toggle('active', k === i));
+    document.getElementById('bar').style.width = ((i + 1) / slides.length * 100) + '%';
+    document.getElementById('num').textContent = (i + 1) + ' / ' + slides.length;
+    history.replaceState(null, '', '#' + (i + 1));
+  }
+  document.addEventListener('keydown', e => {
+    if (['ArrowRight', 'PageDown', ' ', 'Enter'].includes(e.key)) { e.preventDefault(); show(i + 1); }
+    else if (['ArrowLeft', 'PageUp', 'Backspace'].includes(e.key)) { e.preventDefault(); show(i - 1); }
+    else if (e.key === 'Home') show(0);
+    else if (e.key === 'End') show(slides.length - 1);
+    else if (e.key.toLowerCase() === 'f') {
+      if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
+      else document.exitFullscreen?.();
+    }
+  });
+  document.addEventListener('click', e => { if (e.target.closest('a,pre,code')) return; show(e.clientX > innerWidth / 3 ? i + 1 : i - 1); });
+  let tx = null;
+  document.addEventListener('touchstart', e => tx = e.touches[0].clientX);
+  document.addEventListener('touchend', e => { if (tx === null) return; const dx = e.changedTouches[0].clientX - tx; if (Math.abs(dx) > 40) show(dx < 0 ? i + 1 : i - 1); tx = null; });
+  show(i);
+</script>
+</body>
+</html>
